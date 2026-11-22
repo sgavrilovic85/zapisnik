@@ -84,29 +84,35 @@ function prikazi(d) {
     '<div class="qs">Prisutno: ' + q.prisutno + ' od ' + q.ukupno + ' (potrebno ' + q.potrebno + ')</div>' +
     '<div class="bar"><div style="width:' + pr + '%"></div></div></div>';
 
+  h += realizacijaHtml(d.realizacija);
   h += '<div class="k"><b>Stan ' + esc(d.stan) + ' - ' + esc(d.ime) + '</b>';
-  if (otv && !d.prisutan) h += '<button onclick="budiPrisutan()">POTVRĐUJEM PRISUSTVO (NA DALJINU)</button>';
+  if (d.pravo === false) h += '<div class="ne">Vaš posebni deo (garaža ili poslovni prostor) nema pravo glasa na ovoj sednici.</div>';
+  else if (otv && !d.prisutan) h += '<button onclick="budiPrisutan()">POTVRĐUJEM PRISUSTVO (NA DALJINU)</button>';
   else if (d.prisutan) h += '<div class="us">PRISUTAN</div>';
   h += '</div>';
 
   h += '<div class="k"><b>DNEVNI RED</b>';
   s.tacke.forEach(function (t, i) {
-    const n = i + 1, moj = d.moji[n];
+    const n = i + 1, moj = d.moji[n], po = (d.ponude && d.ponude[n]) || [];
     h += '<div style="margin-top:12px"><b>' + n + '.</b> ' + esc(t);
-    if (moj) h += '<div class="us">Vaš glas: ' + esc(moj) + '</div>';
-    else if (otv && d.prisutan && s.otvorene.indexOf(n) >= 0) {
-      h += '<div class="g">' +
-        '<button class="za" onclick="glasaj(' + n + ',\'ZA\')">ZA</button>' +
-        '<button class="pr" onclick="glasaj(' + n + ',\'PROTIV\')">PROTIV</button>' +
-        '<button class="uz" onclick="glasaj(' + n + ',\'UZDRŽAN\')">UZDRŽAN</button></div>';
-    } else if (otv && d.prisutan) {
+    if (po.length) h += '<div><b>Pristigle ponude:</b>' + ponudeHtml(po) + '</div>';
+    if (moj) h += '<div class="us">Vaš glas: ' + esc(glasLabel(moj, po)) + '</div>';
+    else if (otv && d.prisutan && d.pravo !== false && s.otvorene.indexOf(n) >= 0) {
+      if (po.length) {
+        h += '<div style="display:flex;flex-direction:column">' + po.map(function (p) {
+          return '<button class="za" onclick="glasaj(' + n + ',\'PONUDA:' + p.id + '\')">ZA PONUDU: ' + esc(p.ponudjac) + '</button>';
+        }).join('') + '<button class="pr" onclick="glasaj(' + n + ',\'PROTIV\')">PROTIV SVIH PONUDA</button>' +
+          '<button class="uz" onclick="glasaj(' + n + ',\'UZDRŽAN\')">UZDRŽAN</button></div>';
+      } else {
+        h += '<div class="g">' +
+          '<button class="za" onclick="glasaj(' + n + ',\'ZA\')">ZA</button>' +
+          '<button class="pr" onclick="glasaj(' + n + ',\'PROTIV\')">PROTIV</button>' +
+          '<button class="uz" onclick="glasaj(' + n + ',\'UZDRŽAN\')">UZDRŽAN</button></div>';
+      }
+    } else if (otv && d.prisutan && d.pravo !== false) {
       h += '<div style="color:#666;margin-top:4px">Rasprava je u toku - glasanje o ovoj tački još nije otvoreno.</div>';
     }
-    if (d.rezultati) {
-      const r = d.rezultati[i];
-      h += '<div>ZA: ' + r.za + ' | PROTIV: ' + r.protiv + ' | UZDRŽANO: ' + r.uzdrzan +
-        '<br><b class="' + (r.usvojeno ? 'us' : 'ne') + '">' + (r.usvojeno ? 'USVOJENO' : 'NIJE USVOJENO') + '</b></div>';
-    }
+    if (d.rezultati) h += rezHtml(d.rezultati[i]);
     h += '</div>';
   });
   h += '</div>';
@@ -120,6 +126,40 @@ function prikazi(d) {
   h += '<button class="uz" onclick="istorija()">ISTORIJA ZAPISNIKA</button>';
   box.innerHTML = h;
   if (otv) tajmer = setInterval(ucitaj, 5000);
+}
+
+function glasLabel(g, ponude) {
+  if (g && String(g).indexOf('PONUDA:') === 0) {
+    const id = String(g).slice(7), p = (ponude || []).filter(function (x) { return String(x.id) === id; })[0];
+    return 'ponuda: ' + (p ? p.ponudjac : id);
+  }
+  return g;
+}
+function ponudeHtml(lst) {
+  return lst.map(function (p) {
+    return '<div style="margin:6px 0;padding:6px;background:#f6f8fb;border-radius:6px"><b>' + esc(p.ponudjac) + '</b>' +
+      (p.iznos ? ' - ' + esc(p.iznos) : '') + (p.opis ? '<br>' + esc(p.opis) : '') +
+      (/^https?:\/\//i.test(p.link || '') ? '<br><a href="' + esc(p.link) + '" target="_blank" rel="noopener">Pogledaj ponudu</a>' : '') + '</div>';
+  }).join('');
+}
+function rezHtml(r) {
+  if (r.ponude) {
+    return '<div>' + r.ponude.map(function (p) {
+      return esc(p.ponudjac) + (p.iznos ? ' (' + esc(p.iznos) + ')' : '') + ': ' + p.glasova + ' glasova';
+    }).join('<br>') + '<br>PROTIV SVIH: ' + r.protiv + ' | UZDRŽANO: ' + r.uzdrzan +
+      '<br><b class="' + (r.usvojeno ? 'us' : 'ne') + '">' + (r.usvojeno ? 'USVOJENA PONUDA: ' + esc(r.pobednik) : 'NIJE USVOJENO') + '</b></div>';
+  }
+  return '<div>ZA: ' + r.za + ' | PROTIV: ' + r.protiv + ' | UZDRŽANO: ' + r.uzdrzan +
+    '<br><b class="' + (r.usvojeno ? 'us' : 'ne') + '">' + (r.usvojeno ? 'USVOJENO' : 'NIJE USVOJENO') + '</b></div>';
+}
+
+function realizacijaHtml(r) {
+  if (!r || !r.stavke || !r.stavke.length) return '';
+  let h = '<div class="k"><b>IZVEŠTAJ O REALIZACIJI ODLUKA SA PRETHODNE SEDNICE (' + esc(r.datum) + ')</b>';
+  r.stavke.forEach(function (x) {
+    h += '<div style="margin-top:8px"><b>Tačka ' + x.br + '.</b> ' + esc(x.tacka) + '<br><b>' + (x.status ? esc(x.status) : 'nije označeno') + '</b>' + (x.napomena ? ' - ' + esc(x.napomena) : '') + '</div>';
+  });
+  return h + '</div>';
 }
 
 function istorija() {
@@ -145,12 +185,12 @@ function otvoriZ(id) {
       '<br><b>SASTANAK DANA:</b> ' + esc(s.datum) + ' u ' + esc(s.vreme) +
       '<br><b>MESTO SASTANKA:</b> ' + esc(s.mesto) +
       '<br><b>PRISUTNO:</b> ' + q.prisutno + ' od ' + q.ukupno + ' - ' + (q.ima ? 'IMA KVORUMA' : 'NEMA KVORUMA') + '</div>';
+    h += realizacijaHtml(d.realizacija);
     h += '<div class="k"><b>DNEVNI RED</b>';
     s.tacke.forEach(function (t, i) {
-      const r = d.rezultati[i];
+      const r = d.rezultati[i], po = (d.ponude && d.ponude[i + 1]) || [];
       h += '<div style="margin-top:12px"><b>' + (i + 1) + '.</b> ' + esc(t) +
-        '<div>ZA: ' + r.za + ' | PROTIV: ' + r.protiv + ' | UZDRŽANO: ' + r.uzdrzan +
-        '<br><b class="' + (r.usvojeno ? 'us' : 'ne') + '">' + (r.usvojeno ? 'USVOJENO' : 'NIJE USVOJENO') + '</b></div></div>';
+        (po.length ? '<div><b>Pristigle ponude:</b>' + ponudeHtml(po) + '</div>' : '') + rezHtml(r) + '</div>';
     });
     h += '</div><div class="k"><b>PRISUTNI (' + d.prisutni.length + ')</b><table><tr><th>Stan</th><th>Ime</th><th>Način</th></tr>';
     d.prisutni.forEach(function (p) {
@@ -165,7 +205,7 @@ function otvoriZ(id) {
 function odgovor(r) { if (r && r.greska) alert(r.greska); ucitaj(); }
 function budiPrisutan() { rpc('prisutan', L).then(odgovor); }
 function glasaj(t, g) {
-  if (!confirm('Glasate ' + g + ' po tački ' + t + '? Glas se ne može menjati.')) return;
+  if (!confirm('Glasate ' + (String(g).indexOf('PONUDA:') === 0 ? 'ZA IZABRANU PONUDU' : g) + ' po tački ' + t + '? Glas se ne može menjati.')) return;
   rpc('glasaj', Object.assign({ p_tacka: t, p_glas: g }, L)).then(odgovor);
 }
 </script>
