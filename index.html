@@ -21,7 +21,8 @@
   .bar{height:10px;background:#fff5;border-radius:5px;margin-top:8px;overflow:hidden}.bar div{height:10px;background:#fff}
   table{width:100%;border-collapse:collapse;font-size:14px}td,th{border-bottom:1px solid #ddd;padding:5px;text-align:left}
   .us{color:#2e7d32;font-weight:bold}.ne{color:#c62828;font-weight:bold}
-  @media print{button,#pinbox{display:none}}
+  .pb{display:none}
+  @media print{button,#pinbox{display:none}.pb{display:block}}
 </style>
 </head>
 <body>
@@ -68,11 +69,11 @@ function prikazi(d) {
     tajmer = setInterval(ucitaj, 10000); return;
   }
   const s = d.sednica, otv = s.status === 'OTVORENA', q = d.kvorum;
-  let h = '<div class="k"><b>ZGRADA:</b> ' + esc(s.zgrada) +
+  let h = '<div class="k">' + (s.ponovljena ? '<b>PONOVLJENA SEDNICA</b><br>' : '') + '<b>ZGRADA:</b> ' + esc(s.zgrada) +
     '<br><b>BROJ POSEBNIH DELOVA:</b> ' + s.ukupno +
     '<br><b>SASTANAK DANA:</b> ' + esc(s.datum) + ' u ' + esc(s.vreme) +
     '<br><b>MESTO SASTANKA:</b> ' + esc(s.mesto) +
-    '<br><span class="st ' + (otv ? 'o' : 'z') + '">' + (otv ? 'GLASANJE JE OTVORENO' : 'ZAVRŠENO') + '</span></div>';
+    '<br><span class="st ' + (otv ? 'o' : 'z') + '">' + (otv ? (s.otvorene.length ? 'GLASANJE JE OTVORENO (tačka ' + s.otvorene.join(', ') + ')' : 'SEDNICA JE U TOKU - RASPRAVA') : 'ZAVRŠENO') + '</span></div>';
 
   const pr = Math.min(100, Math.round(q.prisutno / Math.max(1, q.potrebno) * 100));
   h += '<div class="k q ' + (q.ima ? 'qy' : 'qn') + '">' + (q.ima ? 'IMA KVORUMA' : 'NEMA KVORUMA') +
@@ -89,11 +90,13 @@ function prikazi(d) {
     const n = i + 1, moj = d.moji[n];
     h += '<div style="margin-top:12px"><b>' + n + '.</b> ' + esc(t);
     if (moj) h += '<div class="us">Vaš glas: ' + esc(moj) + '</div>';
-    else if (otv && d.prisutan) {
+    else if (otv && d.prisutan && s.otvorene.indexOf(n) >= 0) {
       h += '<div class="g">' +
         '<button class="za" onclick="glasaj(' + n + ',\'ZA\')">ZA</button>' +
         '<button class="pr" onclick="glasaj(' + n + ',\'PROTIV\')">PROTIV</button>' +
         '<button class="uz" onclick="glasaj(' + n + ',\'UZDRŽAN\')">UZDRŽAN</button></div>';
+    } else if (otv && d.prisutan) {
+      h += '<div style="color:#666;margin-top:4px">Rasprava je u toku - glasanje o ovoj tački još nije otvoreno.</div>';
     }
     if (d.rezultati) {
       const r = d.rezultati[i];
@@ -133,7 +136,7 @@ function otvoriZ(id) {
   rpc('zapisnik_prikaz', Object.assign({ p_id: id }, L)).then(function (d) {
     if (d.greska) { alert(d.greska); return; }
     const s = d.sednica, q = d.kvorum;
-    let h = '<div class="k"><b>ZAPISNIK SA SEDNICE</b><br><b>ZGRADA:</b> ' + esc(s.zgrada) +
+    let h = '<div class="k"><b>ZAPISNIK SA SEDNICE' + (s.ponovljena ? ' (PONOVLJENA SEDNICA)' : '') + '</b><br><b>ZGRADA:</b> ' + esc(s.zgrada) +
       '<br><b>BROJ POSEBNIH DELOVA:</b> ' + s.ukupno +
       '<br><b>SASTANAK DANA:</b> ' + esc(s.datum) + ' u ' + esc(s.vreme) +
       '<br><b>MESTO SASTANKA:</b> ' + esc(s.mesto) +
@@ -149,7 +152,7 @@ function otvoriZ(id) {
     d.prisutni.forEach(function (p) {
       h += '<tr><td>' + esc(p.stan) + '</td><td>' + esc(p.ime) + '</td><td>' + esc(p.nacin) + '</td></tr>';
     });
-    h += '</table></div><button onclick="window.print()">ŠTAMPAJ / SAČUVAJ PDF</button>' +
+    h += '</table></div><div class="pb" style="margin-top:40px">UPRAVNIK ZGRADE ______________________ Gavrilović Snežana</div><button onclick="window.print()">ŠTAMPAJ / SAČUVAJ PDF</button>' +
          '<button class="uz" onclick="istorija()">NAZAD NA ISTORIJU</button>';
     document.getElementById('sadrzaj').innerHTML = h;
   }).catch(function (e) { alert('Greška: ' + e.message); });
