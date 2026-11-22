@@ -50,14 +50,14 @@
   </div>
 </div>
 <script>
-const SB_URL = 'OVDE_UPIŠI_SUPABASE_URL';
-const SB_KEY = 'OVDE_UPIŠI_ANON_KEY';
+const SB_URL = 'https://rxsvpvmkhhsctcwnohzt.supabase.co';
+const SB_KEY = 'OVDE_UPISI_PUBLISHABLE_KEY';
 let LOZ = '', SID = null, tajmer = null, ZG = [];
 
 function rpc(fn, args) {
   return fetch(SB_URL + '/rest/v1/rpc/' + fn, {
     method: 'POST',
-    headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' },
+    headers: { 'apikey': SB_KEY, 'Content-Type': 'application/json' },
     body: JSON.stringify(args || {})
   }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
 }
