@@ -20,12 +20,19 @@
   .pris{background:#e8f5e9}
   .m{color:#c62828}
   .row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1;min-width:140px}
-  @media print{button,#login,#nova,#izbor{display:none}}
+  .pt,.pb{display:none}
+  @media print{
+    button,#login,#nova,#izbor,.ak,.sa{display:none!important}
+    .pt{display:inline;font-weight:bold}.pb{display:block}
+    .pris{background:none}.k{box-shadow:none;border:1px solid #999}
+    .q{background:none!important;color:#000!important;border:2px solid #000}
+    td,th{font-size:12px;padding:2px 4px}
+  }
 </style>
 </head>
 <body>
 <div class="w">
-  <h2>UPRAVNIK - SEDNICA</h2>
+  <h2><span class="sa">UPRAVNIK - SEDNICA</span><span class="pt">ZAPISNIK SA SEDNICE</span></h2>
   <div id="login" class="k">
     <input id="loz" type="password" placeholder="Admin lozinka">
     <button onclick="uloguj()">UĐI</button>
@@ -49,9 +56,8 @@
     <div id="pregled"></div>
   </div>
 </div>
+<script src="config.js"></script>
 <script>
-const SB_URL = 'https://rxsvpvmkhhsctcwnohzt.supabase.co';
-const SB_KEY = 'sb_publishable_jjMFzYUurO-ohZJ3fwV6Gg_61cQ5-6b';
 let LOZ = '', SID = null, tajmer = null, ZG = [];
 
 function rpc(fn, args) {
@@ -111,10 +117,11 @@ function ucitaj() {
 function prikazi(d) {
   const s = d.sednica, q = d.kvorum, ids = s.tacke.map(function (_, i) { return i + 1; });
   let h = '<div class="k"><b>' + esc(s.zgrada) + '</b> - ' + esc(s.datum) + ' ' + esc(s.vreme) + ' - ' + esc(s.mesto) +
-    '<br>Status: <b>' + esc(s.status) + '</b><br>' +
+    '<br>Status: <b>' + esc(s.status) + '</b><br><div class="ak">' +
     '<button class="zel" onclick="status(\'OTVORENA\')">OTVORI GLASANJE</button>' +
     '<button class="crv" onclick="status(\'ZAVRŠENO\')">ZAVRŠI SEDNICU</button>' +
-    '<button class="sivo" onclick="status(\'PRIPREMA\')">VRATI U PRIPREMU</button></div>';
+    '<button class="sivo" onclick="status(\'PRIPREMA\')">VRATI U PRIPREMU</button>' +
+    '<button class="crv" onclick="ponisti()">PONIŠTI SEDNICU</button></div></div>';
   h += '<div class="q ' + (q.ima ? 'qy' : 'qn') + '">' + (q.ima ? 'IMA KVORUMA' : 'NEMA KVORUMA') +
     ' - prisutno ' + q.prisutno + ' od ' + q.ukupno + ' (potrebno ' + q.potrebno + ')</div><br>';
 
@@ -124,13 +131,13 @@ function prikazi(d) {
   d.stanari.forEach(function (st) {
     h += '<tr class="' + (st.nacin ? 'pris' : '') + '"><td>' + esc(st.stan) + '</td><td class="l">' + esc(st.ime) + '</td>' +
       '<td><button class="gb ' + (st.nacin ? 'on za' : '') + '" onclick="prisutan(' + st.id + ',' + (!st.nacin) + ')">' +
-      (st.nacin ? '✔ ' + esc(st.nacin) : 'upiši lično') + '</button></td>';
+      (st.nacin ? '✔ ' + esc(st.nacin) : 'upiši lično') + '</button><span class="pt">' + (st.nacin ? esc(st.nacin) : '-') + '</span></td>';
     ids.forEach(function (n) {
       const g = st.glasovi[n];
       h += '<td>' + [['ZA','za','ZA'],['PROTIV','pr','PROTIV'],['UZDRŽAN','uz','UZDR.']].map(function (x) {
         const on = g === x[0];
         return '<button class="gb ' + x[1] + (on ? ' on' : '') + '" onclick="glas(' + st.id + ',' + n + ',\'' + x[0] + '\',' + on + ')">' + (on ? '✔ ' : '') + x[2] + '</button>';
-      }).join('') + '</td>';
+      }).join('') + '<span class="pt">' + (g ? esc(g) : '-') + '</span></td>';
     });
     h += '</tr>';
   });
@@ -141,10 +148,20 @@ function prikazi(d) {
     h += '<div>' + (i + 1) + '. ' + esc(r.tacka) + ' - ZA: ' + r.za + ' | PROTIV: ' + r.protiv + ' | UZDRŽANO: ' + r.uzdrzan +
       ' - <b>' + (r.usvojeno ? 'USVOJENO' : 'NIJE USVOJENO') + '</b></div>';
   });
-  h += '<button onclick="window.print()">ŠTAMPAJ ZAPISNIK</button></div>';
+  h += '<button onclick="window.print()">ŠTAMPAJ ZAPISNIK</button></div>' +
+    '<div class="pb" style="margin-top:40px">Zapisničar: ______________________ &nbsp;&nbsp;&nbsp; Predsednik skupštine: ______________________</div>';
   document.getElementById('pregled').innerHTML = h;
 }
 
+function ponisti() {
+  if (!confirm('PONIŠTI SEDNICU? Briše se cela sednica zajedno sa prisustvom i glasovima. Ovo se ne može vratiti.')) return;
+  if (!confirm('Da li si sigurna? Sednica i svi glasovi će biti obrisani.')) return;
+  adm('admin_obrisi_sednicu', { p_id: Number(SID) }).then(function () {
+    clearInterval(tajmer); SID = null;
+    document.getElementById('pregled').innerHTML = '';
+    return osvezi();
+  }).catch(function (e) { alert(e.message); });
+}
 function status(st) {
   if (st === 'ZAVRŠENO' && !confirm('Završiti sednicu? Posle toga se ne može glasati.')) return;
   adm('admin_status', { p_id: Number(SID), p_status: st }).then(function () { ucitaj(); osvezi(); }).catch(function (e) { alert(e.message); });
