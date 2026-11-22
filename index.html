@@ -37,14 +37,14 @@
   <div id="sadrzaj"></div>
 </div>
 <script>
-const SB_URL = 'OVDE_UPIŠI_SUPABASE_URL';   // npr. https://abcd1234.supabase.co
-const SB_KEY = 'OVDE_UPIŠI_ANON_KEY';        // Project Settings > API > anon public
+const SB_URL = 'https://rxsvpvmkhhsctcwnohzt.supabase.co';   // npr. https://abcd1234.supabase.co
+const SB_KEY = 'OVDE_UPISI_PUBLISHABLE_KEY';        // Project Settings > API > anon public
 let L = null, tajmer = null;
 
 function rpc(fn, args) {
   return fetch(SB_URL + '/rest/v1/rpc/' + fn, {
     method: 'POST',
-    headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' },
+    headers: { 'apikey': SB_KEY, 'Content-Type': 'application/json' },
     body: JSON.stringify(args || {})
   }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
 }
@@ -71,7 +71,7 @@ function prikazi(d) {
   document.getElementById('pinbox').style.display = 'none';
   clearInterval(tajmer);
   if (d.nema) {
-    box.innerHTML = '<div class="k">Zdravo, ' + esc(d.ime) + ' (stan ' + esc(d.stan) + '). Za vašu zgradu trenutno nema sednice.</div>';
+    box.innerHTML = '<div class="k">Zdravo, ' + esc(d.ime) + ' (stan ' + esc(d.stan) + '). Za vašu zgradu trenutno nema sednice.</div><button class="uz" onclick="istorija()">ISTORIJA ZAPISNIKA</button>';
     tajmer = setInterval(ucitaj, 10000); return;
   }
   const s = d.sednica, otv = s.status === 'OTVORENA', q = d.kvorum;
@@ -117,8 +117,49 @@ function prikazi(d) {
   });
   h += '</table></div>';
   if (!otv) h += '<button onclick="window.print()">ŠTAMPAJ / SAČUVAJ PDF</button>';
+  h += '<button class="uz" onclick="istorija()">ISTORIJA ZAPISNIKA</button>';
   box.innerHTML = h;
   if (otv) tajmer = setInterval(ucitaj, 5000);
+}
+
+function istorija() {
+  clearInterval(tajmer);
+  rpc('istorija_zapisnika', L).then(function (r) {
+    if (r.greska) { alert(r.greska); return; }
+    let h = '<div class="k"><b>ISTORIJA ZAPISNIKA - ' + esc(L.p_zgrada) + '</b>';
+    if (!r.length) h += '<div style="margin-top:8px">Još nema završenih sednica.</div>';
+    r.forEach(function (z) {
+      h += '<button onclick="otvoriZ(' + z.id + ')">' + esc(z.datum) + ' ' + esc(z.vreme) + ' - ' + esc(z.mesto) + '</button>';
+    });
+    h += '</div><button class="uz" onclick="ucitaj()">NAZAD</button>';
+    document.getElementById('sadrzaj').innerHTML = h;
+  }).catch(function (e) { alert('Greška: ' + e.message); });
+}
+
+function otvoriZ(id) {
+  rpc('zapisnik_prikaz', Object.assign({ p_id: id }, L)).then(function (d) {
+    if (d.greska) { alert(d.greska); return; }
+    const s = d.sednica, q = d.kvorum;
+    let h = '<div class="k"><b>ZAPISNIK SA SEDNICE</b><br><b>ZGRADA:</b> ' + esc(s.zgrada) +
+      '<br><b>BROJ POSEBNIH DELOVA:</b> ' + s.ukupno +
+      '<br><b>SASTANAK DANA:</b> ' + esc(s.datum) + ' u ' + esc(s.vreme) +
+      '<br><b>MESTO SASTANKA:</b> ' + esc(s.mesto) +
+      '<br><b>PRISUTNO:</b> ' + q.prisutno + ' od ' + q.ukupno + ' - ' + (q.ima ? 'IMA KVORUMA' : 'NEMA KVORUMA') + '</div>';
+    h += '<div class="k"><b>DNEVNI RED</b>';
+    s.tacke.forEach(function (t, i) {
+      const r = d.rezultati[i];
+      h += '<div style="margin-top:12px"><b>' + (i + 1) + '.</b> ' + esc(t) +
+        '<div>ZA: ' + r.za + ' | PROTIV: ' + r.protiv + ' | UZDRŽANO: ' + r.uzdrzan +
+        '<br><b class="' + (r.usvojeno ? 'us' : 'ne') + '">' + (r.usvojeno ? 'USVOJENO' : 'NIJE USVOJENO') + '</b></div></div>';
+    });
+    h += '</div><div class="k"><b>PRISUTNI (' + d.prisutni.length + ')</b><table><tr><th>Stan</th><th>Ime</th><th>Način</th></tr>';
+    d.prisutni.forEach(function (p) {
+      h += '<tr><td>' + esc(p.stan) + '</td><td>' + esc(p.ime) + '</td><td>' + esc(p.nacin) + '</td></tr>';
+    });
+    h += '</table></div><button onclick="window.print()">ŠTAMPAJ / SAČUVAJ PDF</button>' +
+         '<button class="uz" onclick="istorija()">NAZAD NA ISTORIJU</button>';
+    document.getElementById('sadrzaj').innerHTML = h;
+  }).catch(function (e) { alert('Greška: ' + e.message); });
 }
 
 function odgovor(r) { if (r && r.greska) alert(r.greska); ucitaj(); }
