@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Upravnik - sednica</title>
+<style>
+  body{font-family:Arial,sans-serif;margin:0;background:#f2f4f7;color:#1a1a1a}
+  .w{max-width:1000px;margin:0 auto;padding:12px}
+  .k{background:#fff;border-radius:10px;padding:12px;margin-bottom:12px;box-shadow:0 1px 3px #0002}
+  input,select{font-size:16px;padding:9px;box-sizing:border-box;margin:4px 0;width:100%}
+  button{font-size:15px;padding:10px 12px;border:0;border-radius:8px;background:#1565c0;color:#fff;margin:3px 3px 3px 0}
+  .zel{background:#2e7d32}.crv{background:#c62828}.sivo{background:#777}
+  .q{text-align:center;font-size:20px;font-weight:bold;color:#fff;border-radius:10px;padding:10px}.qy{background:#2e7d32}.qn{background:#c62828}
+  .sc{overflow-x:auto}
+  table{border-collapse:collapse;font-size:14px;min-width:100%}td,th{border:1px solid #ddd;padding:4px;text-align:center;white-space:nowrap}
+  td.l{text-align:left}
+  .gb{padding:6px 7px;font-size:13px;margin:1px;background:#e0e0e0;color:#333}
+  .gb.on.za{background:#2e7d32;color:#fff}.gb.on.pr{background:#c62828;color:#fff}.gb.on.uz{background:#555;color:#fff}
+  .pris{background:#e8f5e9}
+  .m{color:#c62828}
+  .row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1;min-width:140px}
+  @media print{button,#login,#nova,#izbor{display:none}}
+</style>
+</head>
+<body>
+<div class="w">
+  <h2>UPRAVNIK - SEDNICA</h2>
+  <div id="login" class="k">
+    <input id="loz" type="password" placeholder="Admin lozinka">
+    <button onclick="uloguj()">UĐI</button>
+    <div id="m" class="m"></div>
+  </div>
+  <div id="app" style="display:none">
+    <div id="izbor" class="k">
+      <select id="sel" onchange="biraj(this.value)"></select>
+      <button class="zel" onclick="document.getElementById('nova').style.display='block'">+ NOVA SEDNICA</button>
+    </div>
+    <div id="nova" class="k" style="display:none">
+      <b>Nova sednica</b>
+      <select id="n_zg"></select>
+      <div class="row"><input id="n_dat" type="date"><input id="n_vre" placeholder="Vreme (npr. 18:00)"></div>
+      <input id="n_mes" placeholder="Mesto sastanka">
+      <input id="t1" placeholder="1. tačka dnevnog reda"><input id="t2" placeholder="2. tačka">
+      <input id="t3" placeholder="3. tačka"><input id="t4" placeholder="4. tačka"><input id="t5" placeholder="5. tačka">
+      <input id="n_kv" type="number" placeholder="Kvorum (broj stanova) - prazno = više od polovine">
+      <button class="zel" onclick="napravi()">SAČUVAJ SEDNICU</button>
+    </div>
+    <div id="pregled"></div>
+  </div>
+</div>
+<script>
+const SB_URL = 'OVDE_UPIŠI_SUPABASE_URL';
+const SB_KEY = 'OVDE_UPIŠI_ANON_KEY';
+let LOZ = '', SID = null, tajmer = null, ZG = [];
+
+function rpc(fn, args) {
+  return fetch(SB_URL + '/rest/v1/rpc/' + fn, {
+    method: 'POST',
+    headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify(args || {})
+  }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+}
+function adm(fn, args) {
+  return rpc(fn, Object.assign({ p_loz: LOZ }, args || {})).then(function (r) {
+    if (r && r.greska) throw new Error(r.greska); return r;
+  });
+}
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+function uloguj() {
+  LOZ = document.getElementById('loz').value;
+  Promise.all([adm('admin_sednice'), rpc('zgrade')]).then(function (r) {
+    document.getElementById('login').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    ZG = r[1];
+    document.getElementById('n_zg').innerHTML = ZG.map(function (z) { return '<option>' + esc(z) + '</option>'; }).join('');
+    lista(r[0], SID);
+  }).catch(function (e) { document.getElementById('m').textContent = e.message; });
+}
+function lista(sed, izabrana) {
+  const sel = document.getElementById('sel');
+  sel.innerHTML = '<option value="">Izaberi sednicu...</option>' + sed.map(function (s) {
+    return '<option value="' + s.id + '">' + esc(s.zgrada) + ' - ' + esc(s.datum) + ' - ' + esc(s.status) + '</option>';
+  }).join('');
+  if (izabrana) { sel.value = izabrana; }
+}
+function osvezi() { return adm('admin_sednice').then(function (s) { lista(s, SID); }); }
+function napravi() {
+  adm('admin_nova', {
+    p_zgrada: document.getElementById('n_zg').value, p_datum: document.getElementById('n_dat').value,
+    p_vreme: document.getElementById('n_vre').value, p_mesto: document.getElementById('n_mes').value,
+    p_t1: document.getElementById('t1').value, p_t2: document.getElementById('t2').value, p_t3: document.getElementById('t3').value,
+    p_t4: document.getElementById('t4').value, p_t5: document.getElementById('t5').value,
+    p_kvorum: document.getElementById('n_kv').value ? Number(document.getElementById('n_kv').value) : null
+  }).then(function (r) {
+    document.getElementById('nova').style.display = 'none';
+    SID = r.id; return osvezi().then(function () { biraj(SID); });
+  }).catch(function (e) { alert(e.message); });
+}
+
+function biraj(id) {
+  clearInterval(tajmer); SID = id || null;
+  if (!SID) { document.getElementById('pregled').innerHTML = ''; return; }
+  ucitaj(); tajmer = setInterval(ucitaj, 5000);
+}
+function ucitaj() {
+  adm('admin_pregled', { p_id: Number(SID) }).then(prikazi).catch(function (e) { alert(e.message); });
+}
+
+function prikazi(d) {
+  const s = d.sednica, q = d.kvorum, ids = s.tacke.map(function (_, i) { return i + 1; });
+  let h = '<div class="k"><b>' + esc(s.zgrada) + '</b> - ' + esc(s.datum) + ' ' + esc(s.vreme) + ' - ' + esc(s.mesto) +
+    '<br>Status: <b>' + esc(s.status) + '</b><br>' +
+    '<button class="zel" onclick="status(\'OTVORENA\')">OTVORI GLASANJE</button>' +
+    '<button class="crv" onclick="status(\'ZAVRŠENO\')">ZAVRŠI SEDNICU</button>' +
+    '<button class="sivo" onclick="status(\'PRIPREMA\')">VRATI U PRIPREMU</button></div>';
+  h += '<div class="q ' + (q.ima ? 'qy' : 'qn') + '">' + (q.ima ? 'IMA KVORUMA' : 'NEMA KVORUMA') +
+    ' - prisutno ' + q.prisutno + ' od ' + q.ukupno + ' (potrebno ' + q.potrebno + ')</div><br>';
+
+  h += '<div class="k sc"><table><tr><th>Stan</th><th>Ime</th><th>Prisutan</th>';
+  s.tacke.forEach(function (t, i) { h += '<th>' + (i + 1) + '. ' + esc(t) + '<br>ZA / PROTIV / UZDRŽAN</th>'; });
+  h += '</tr>';
+  d.stanari.forEach(function (st) {
+    h += '<tr class="' + (st.nacin ? 'pris' : '') + '"><td>' + esc(st.stan) + '</td><td class="l">' + esc(st.ime) + '</td>' +
+      '<td><button class="gb ' + (st.nacin ? 'on za' : '') + '" onclick="prisutan(' + st.id + ',' + (!st.nacin) + ')">' +
+      (st.nacin ? '✔ ' + esc(st.nacin) : 'upiši lično') + '</button></td>';
+    ids.forEach(function (n) {
+      const g = st.glasovi[n];
+      h += '<td>' + [['ZA','za','ZA'],['PROTIV','pr','PROTIV'],['UZDRŽAN','uz','UZDR.']].map(function (x) {
+        const on = g === x[0];
+        return '<button class="gb ' + x[1] + (on ? ' on' : '') + '" onclick="glas(' + st.id + ',' + n + ',\'' + x[0] + '\',' + on + ')">' + (on ? '✔ ' : '') + x[2] + '</button>';
+      }).join('') + '</td>';
+    });
+    h += '</tr>';
+  });
+  h += '</table></div>';
+
+  h += '<div class="k"><b>REZULTATI</b>';
+  d.rezultati.forEach(function (r, i) {
+    h += '<div>' + (i + 1) + '. ' + esc(r.tacka) + ' - ZA: ' + r.za + ' | PROTIV: ' + r.protiv + ' | UZDRŽANO: ' + r.uzdrzan +
+      ' - <b>' + (r.usvojeno ? 'USVOJENO' : 'NIJE USVOJENO') + '</b></div>';
+  });
+  h += '<button onclick="window.print()">ŠTAMPAJ ZAPISNIK</button></div>';
+  document.getElementById('pregled').innerHTML = h;
+}
+
+function status(st) {
+  if (st === 'ZAVRŠENO' && !confirm('Završiti sednicu? Posle toga se ne može glasati.')) return;
+  adm('admin_status', { p_id: Number(SID), p_status: st }).then(function () { ucitaj(); osvezi(); }).catch(function (e) { alert(e.message); });
+}
+function prisutan(stanar, jeste) {
+  adm('admin_prisutan', { p_id: Number(SID), p_stanar: stanar, p_prisutan: jeste }).then(ucitaj).catch(function (e) { alert(e.message); });
+}
+function glas(stanar, tacka, g, vecOn) {
+  adm('admin_glas', { p_id: Number(SID), p_stanar: stanar, p_tacka: tacka, p_glas: vecOn ? '' : g }).then(ucitaj).catch(function (e) { alert(e.message); });
+}
+</script>
+</body>
+</html>
