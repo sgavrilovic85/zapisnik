@@ -26,8 +26,10 @@
     .pt{display:inline;font-weight:bold}.pb{display:block}
     .pris{background:none}.k{box-shadow:none;border:1px solid #999}
     .q{background:none!important;color:#000!important;border:2px solid #000}
-    td,th{font-size:12px;padding:2px 4px}
+    td,th{font-size:11px;padding:2px 4px;white-space:normal!important}
+    .sc{overflow:visible!important}
   }
+@page{size:A4 landscape;margin:10mm}
 </style>
 </head>
 <body>
@@ -41,7 +43,7 @@
   <div id="app" style="display:none">
     <div id="izbor" class="k">
       <select id="sel" onchange="biraj(this.value)"></select>
-      <button class="zel" onclick="document.getElementById('nova').style.display='block'">+ NOVA SEDNICA</button>
+      <button class="zel" onclick="PON=null;document.getElementById('nova').style.display='block'">+ NOVA SEDNICA</button>
     </div>
     <div id="nova" class="k" style="display:none">
       <b>Nova sednica</b>
@@ -58,7 +60,7 @@
 </div>
 <script src="config.js"></script>
 <script>
-let LOZ = '', SID = null, tajmer = null, ZG = [];
+let LOZ = '', SID = null, tajmer = null, ZG = [], PON = null;
 
 function rpc(fn, args) {
   return fetch(SB_URL + '/rest/v1/rpc/' + fn, {
@@ -87,7 +89,7 @@ function uloguj() {
 function lista(sed, izabrana) {
   const sel = document.getElementById('sel');
   sel.innerHTML = '<option value="">Izaberi sednicu...</option>' + sed.map(function (s) {
-    return '<option value="' + s.id + '">' + esc(s.zgrada) + ' - ' + esc(s.datum) + ' - ' + esc(s.status) + '</option>';
+    return '<option value="' + s.id + '">' + esc(s.zgrada) + ' - ' + esc(s.datum) + ' - ' + esc(s.status) + (s.ponovljena ? ' (PONOVLJENA)' : '') + '</option>';
   }).join('');
   if (izabrana) { sel.value = izabrana; }
 }
@@ -98,10 +100,11 @@ function napravi() {
     p_vreme: document.getElementById('n_vre').value, p_mesto: document.getElementById('n_mes').value,
     p_t1: document.getElementById('t1').value, p_t2: document.getElementById('t2').value, p_t3: document.getElementById('t3').value,
     p_t4: document.getElementById('t4').value, p_t5: document.getElementById('t5').value,
-    p_kvorum: document.getElementById('n_kv').value ? Number(document.getElementById('n_kv').value) : null
+    p_kvorum: document.getElementById('n_kv').value ? Number(document.getElementById('n_kv').value) : null,
+    p_ponovljena: PON
   }).then(function (r) {
     document.getElementById('nova').style.display = 'none';
-    SID = r.id; return osvezi().then(function () { biraj(SID); });
+    PON = null; SID = r.id; return osvezi().then(function () { biraj(SID); });
   }).catch(function (e) { alert(e.message); });
 }
 
@@ -116,12 +119,17 @@ function ucitaj() {
 
 function prikazi(d) {
   const s = d.sednica, q = d.kvorum, ids = s.tacke.map(function (_, i) { return i + 1; });
-  let h = '<div class="k"><b>' + esc(s.zgrada) + '</b> - ' + esc(s.datum) + ' ' + esc(s.vreme) + ' - ' + esc(s.mesto) +
+  let h = '<div class="k"><b>' + esc(s.zgrada) + '</b>' + (s.ponovljena ? ' <b>(PONOVLJENA SEDNICA)</b>' : '') + ' - ' + esc(s.datum) + ' ' + esc(s.vreme) + ' - ' + esc(s.mesto) +
     '<br>Status: <b>' + esc(s.status) + '</b><br><div class="ak">' +
-    '<button class="zel" onclick="status(\'OTVORENA\')">OTVORI GLASANJE</button>' +
+    '<button class="zel" onclick="status(\'OTVORENA\')">POČNI SEDNICU (prijava + rasprava)</button>' +
     '<button class="crv" onclick="status(\'ZAVRŠENO\')">ZAVRŠI SEDNICU</button>' +
     '<button class="sivo" onclick="status(\'PRIPREMA\')">VRATI U PRIPREMU</button>' +
-    '<button class="crv" onclick="ponisti()">PONIŠTI SEDNICU</button></div></div>';
+    '<button class="crv" onclick="ponisti()">PONIŠTI SEDNICU</button>' +
+    '<button onclick="ponovi()">PONOVLJENA SEDNICA</button>' +
+    (s.status === 'OTVORENA' ? '<div style="margin-top:8px"><b>Glasanje po tačkama (posle rasprave):</b><br>' + s.tacke.map(function (t, i) {
+      const n = i + 1, on = s.otvorene.indexOf(n) >= 0, kr = t.length > 28 ? t.slice(0, 28) + '...' : t;
+      return '<button class="' + (on ? 'crv' : 'zel') + '" onclick="tacka(' + n + ',' + (!on) + ')">' + (on ? 'ZATVORI GLASANJE ' : 'OTVORI GLASANJE ') + n + '. ' + esc(kr) + '</button>';
+    }).join('') + '</div>' : '') + '</div></div>';
   h += '<div class="q ' + (q.ima ? 'qy' : 'qn') + '">' + (q.ima ? 'IMA KVORUMA' : 'NEMA KVORUMA') +
     ' - prisutno ' + q.prisutno + ' od ' + q.ukupno + ' (potrebno ' + q.potrebno + ')</div><br>';
 
@@ -149,10 +157,28 @@ function prikazi(d) {
       ' - <b>' + (r.usvojeno ? 'USVOJENO' : 'NIJE USVOJENO') + '</b></div>';
   });
   h += '<button onclick="window.print()">ŠTAMPAJ ZAPISNIK</button></div>' +
-    '<div class="pb" style="margin-top:40px">Zapisničar: ______________________ &nbsp;&nbsp;&nbsp; Predsednik skupštine: ______________________</div>';
+    '<div class="pb" style="margin-top:40px">UPRAVNIK ZGRADE ______________________ Gavrilović Snežana</div>';
   document.getElementById('pregled').innerHTML = h;
 }
 
+function tacka(n, otvori) {
+  adm('admin_tacka', { p_id: Number(SID), p_tacka: n, p_otvori: otvori }).then(ucitaj).catch(function (e) { alert(e.message); });
+}
+function ponovi() {
+  adm('admin_pregled', { p_id: Number(SID) }).then(function (d) {
+    const s = d.sednica;
+    document.getElementById('n_zg').value = s.zgrada;
+    document.getElementById('n_mes').value = s.mesto;
+    document.getElementById('n_dat').value = '';
+    document.getElementById('n_vre').value = '';
+    document.getElementById('n_kv').value = '';
+    for (let i = 1; i <= 5; i++) document.getElementById('t' + i).value = s.tacke[i - 1] || '';
+    PON = Number(SID);
+    document.getElementById('nova').style.display = 'block';
+    window.scrollTo(0, 0);
+    alert('Forma je popunjena iz prve sednice. Upiši datum, vreme i po potrebi kvorum, pa SAČUVAJ SEDNICU.');
+  }).catch(function (e) { alert(e.message); });
+}
 function ponisti() {
   if (!confirm('PONIŠTI SEDNICU? Briše se cela sednica zajedno sa prisustvom i glasovima. Ovo se ne može vratiti.')) return;
   if (!confirm('Da li si sigurna? Sednica i svi glasovi će biti obrisani.')) return;
