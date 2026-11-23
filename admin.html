@@ -54,6 +54,14 @@
       <select id="sel" onchange="biraj(this.value)"></select>
       <button class="zel" onclick="PON=null;document.getElementById('nova').style.display='block'">+ NOVA SEDNICA</button>
     </div>
+    <details id="hitnibox" class="k ak">
+      <summary><b>HITNE INTERVENCIJE</b> (vidi samo upravnik; stanari u zapisniku vide samo izveštaj)</summary>
+      <select id="h_zg" onchange="hitneUcitaj()"></select>
+      <div class="row"><input id="h_dat" type="date"><input id="h_vre" type="time"><input id="h_stan" placeholder="Prijavio stan (npr. 12)"></div>
+      <input id="h_opis" placeholder="Opis intervencije (npr. pukla cev u podrumu)">
+      <button class="zel" onclick="hitnaDodaj()">DODAJ INTERVENCIJU</button>
+      <div id="hitnelista" class="sc"></div>
+    </details>
     <div id="nova" class="k" style="display:none">
       <b>Nova sednica</b>
       <select id="n_zg"></select>
@@ -92,6 +100,11 @@ function uloguj() {
     document.getElementById('app').style.display = 'block';
     ZG = r[1];
     document.getElementById('n_zg').innerHTML = ZG.map(function (z) { return '<option>' + esc(z) + '</option>'; }).join('');
+    document.getElementById('h_zg').innerHTML = ZG.map(function (z) { return '<option>' + esc(z) + '</option>'; }).join('');
+    const sad = new Date(), p2 = function (x) { return String(x).padStart(2, '0'); };
+    document.getElementById('h_dat').value = sad.getFullYear() + '-' + p2(sad.getMonth() + 1) + '-' + p2(sad.getDate());
+    document.getElementById('h_vre').value = p2(sad.getHours()) + ':' + p2(sad.getMinutes());
+    hitneUcitaj();
     lista(r[0], SID);
   }).catch(function (e) { document.getElementById('m').textContent = e.message; });
 }
@@ -125,10 +138,12 @@ function biraj(id) {
 function ucitaj() {
   const ae = document.activeElement;
   if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA') && document.getElementById('pregled').contains(ae)) return;
-  adm('admin_pregled', { p_id: Number(SID) }).then(prikazi).catch(function (e) { alert(e.message); });
+  adm('admin_pregled', { p_id: Number(SID) }).then(function (d) {
+    return adm('admin_hitne_lista', { p_zgrada: d.sednica.zgrada }).then(function (hl) { prikazi(d, hl); });
+  }).catch(function (e) { alert(e.message); });
 }
 
-function prikazi(d) {
+function prikazi(d, hl) {
   const s = d.sednica, q = d.kvorum, ids = s.tacke.map(function (_, i) { return i + 1; });
   let h = '<div class="k"><b>' + esc(s.zgrada) + '</b>' + (s.ponovljena ? ' <b>(PONOVLJENA SEDNICA)</b>' : '') + ' - ' + esc(s.datum) + ' ' + esc(s.vreme) + ' - ' + esc(s.mesto) +
     '<br>Status: <b>' + esc(s.status) + '</b><br><div class="ak">' +
@@ -150,6 +165,7 @@ function prikazi(d) {
 
   h += ponudeAdmin(s, d.ponude || {});
   h += realizacijaAdmin(d.realizacija);
+  h += hitneZapisnik(hl || [], s);
   h += '<div class="k sc"><table><tr><th>Stan</th><th>Ime</th><th>Prisutan</th>';
   s.tacke.forEach(function (t, i) {
     const kr = t.length > 22 ? t.slice(0, 22) + '...' : t;
@@ -200,6 +216,46 @@ function prikazi(d) {
   if (novo && sl) novo.scrollLeft = sl;
 }
 
+// izveštaj o hitnoj intervenciji u zapisniku (bez imena stana koji je prijavio)
+function hitneZapisnik(hl, s) {
+  const lst = hl.filter(function (x) { return s.status === 'ZAVRŠENO' ? x.sednica == SID : (x.sednica == null || x.sednica == SID); });
+  if (!lst.length) return '';
+  let h = '<div class="k"><b>IZVEŠTAJ O HITNOJ INTERVENCIJI</b>';
+  lst.slice().reverse().forEach(function (x) {
+    h += '<div style="margin-top:8px">Prijavljeno: ' + esc(x.datum) + ' u ' + esc(x.vreme) + (x.opis ? ' - ' + esc(x.opis) : '') +
+      '<br><b>' + (x.zavrseno_tekst ? 'Završeno: ' + esc(x.zavrseno_tekst) : 'U toku') + '</b></div>';
+  });
+  return h + '</div>';
+}
+function hitneUcitaj() {
+  const z = document.getElementById('h_zg').value;
+  if (!z) return;
+  adm('admin_hitne_lista', { p_zgrada: z }).then(function (l) {
+    let h = '<table><tr><th>Prijava (datum, čas)</th><th>Prijavio stan</th><th>Opis</th><th>Završeno (datum)</th><th></th></tr>';
+    if (!l.length) h += '<tr><td colspan="5">Nema upisanih intervencija.</td></tr>';
+    l.forEach(function (x) {
+      h += '<tr><td>' + esc(x.datum) + ' ' + esc(x.vreme) + '</td><td>' + esc(x.stan) + '</td><td class="l">' + esc(x.opis) +
+        '</td><td><input type="date" value="' + esc(x.zavrseno) + '" onchange="hitnaZavrsi(' + x.id + ',this.value)"></td>' +
+        '<td><button class="gb" onclick="hitnaObrisi(' + x.id + ')">obriši</button>' + (x.sednica ? ' <i>u zapisniku</i>' : '') + '</td></tr>';
+    });
+    document.getElementById('hitnelista').innerHTML = h + '</table>';
+  }).catch(function (e) { alert(e.message); });
+}
+function hitnaDodaj() {
+  adm('admin_hitna_dodaj', { p_zgrada: document.getElementById('h_zg').value, p_datum: document.getElementById('h_dat').value,
+    p_vreme: document.getElementById('h_vre').value, p_stan: document.getElementById('h_stan').value,
+    p_opis: document.getElementById('h_opis').value }).then(function () {
+    document.getElementById('h_stan').value = ''; document.getElementById('h_opis').value = '';
+    hitneUcitaj();
+  }).catch(function (e) { alert(e.message); });
+}
+function hitnaZavrsi(id, datum) {
+  adm('admin_hitna_zavrsi', { p_id: id, p_datum: datum }).then(hitneUcitaj).catch(function (e) { alert(e.message); });
+}
+function hitnaObrisi(id) {
+  if (!confirm('Obrisati ovu intervenciju?')) return;
+  adm('admin_hitna_obrisi', { p_id: id }).then(hitneUcitaj).catch(function (e) { alert(e.message); });
+}
 function glasLabel(g, ponude) {
   if (g && String(g).indexOf('PONUDA:') === 0) {
     const id = String(g).slice(7), p = (ponude || []).filter(function (x) { return String(x.id) === id; })[0];
