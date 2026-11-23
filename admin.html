@@ -22,6 +22,10 @@
   .gb{padding:4px 5px;font-size:12px;margin:1px;background:#e0e0e0;color:#333}
   .gb.on.za{background:#2e7d32;color:#fff}.gb.on.pr{background:#c62828;color:#fff}.gb.on.uz{background:#555;color:#fff}
   .pris{background:#e8f5e9}
+  tr{background:#fff}
+  .sc th:nth-child(1),.sc td:nth-child(1){position:sticky;left:0;z-index:2;background:inherit;min-width:44px}
+  .sc th:nth-child(2),.sc td:nth-child(2){position:sticky;left:44px;z-index:2;background:inherit;min-width:170px}
+  .sc th{background:#fff}
   .m{color:#c62828}
   .row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1;min-width:140px}
   .pt,.pb{display:none}
@@ -29,6 +33,7 @@
     button,#login,#nova,#izbor,.ak,.sa{display:none!important}
     .pt{display:inline;font-weight:bold}.pb{display:block}
     .pris{background:none}.k{box-shadow:none;border:1px solid #999}
+    .sc th,.sc td{position:static!important}
     .q{background:none!important;color:#000!important;border:2px solid #000}
     td,th{font-size:11px;padding:2px 4px;white-space:normal!important}
     .sc{overflow:visible!important}
@@ -119,7 +124,7 @@ function biraj(id) {
 }
 function ucitaj() {
   const ae = document.activeElement;
-  if (ae && ae.tagName === 'INPUT' && document.getElementById('pregled').contains(ae)) return;
+  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA') && document.getElementById('pregled').contains(ae)) return;
   adm('admin_pregled', { p_id: Number(SID) }).then(prikazi).catch(function (e) { alert(e.message); });
 }
 
@@ -133,6 +138,7 @@ function prikazi(d) {
     '<button class="crv" onclick="ponisti()">PONIŠTI SEDNICU</button>' +
     '<button onclick="ponovi()">PONOVLJENA SEDNICA</button>' +
     '<button onclick="dodajTacku()">+ DODAJ TAČKU</button>' +
+    (s.status !== 'ZAVRŠENO' ? '<button onclick="dodajPonudu(' + s.tacke.length + ')">+ DODAJ PONUDU</button>' : '') +
     '<div style="margin-top:8px"><b>Pravo glasa:</b> ' + pravoDugme('G', 'GARAŽE (G)', s.glasaju_g) + pravoDugme('PP', 'POSLOVNI PROSTORI (PP)', s.glasaju_pp) + '</div>' +
     (s.status === 'OTVORENA' ? '<div style="margin-top:8px"><b>Glasanje po tačkama (posle rasprave):</b><br>' + s.tacke.map(function (t, i) {
       const n = i + 1, on = s.otvorene.indexOf(n) >= 0, kr = t.length > 28 ? t.slice(0, 28) + '...' : t;
@@ -183,9 +189,15 @@ function prikazi(d) {
         ' - <b>' + (r.usvojeno ? 'USVOJENO' : 'NIJE USVOJENO') + '</b></div>';
     }
   });
+  h += '<div style="margin-top:12px"><b>Napomena:</b><br><textarea class="ak" rows="3" style="width:100%;box-sizing:border-box" onchange="napomena(this.value)">' + esc(s.napomena || '') +
+    '</textarea><span class="pt">' + (s.napomena ? esc(s.napomena) : '______________________________________________________________________') + '</span></div>';
   h += '<button onclick="window.print()">ŠTAMPAJ ZAPISNIK</button></div>' +
     '<div class="pb" style="margin-top:40px">UPRAVNIK ZGRADE ______________________ Gavrilović Snežana</div>';
+  const staro = document.querySelector('#pregled .sc');
+  const sl = staro ? staro.scrollLeft : 0;
   document.getElementById('pregled').innerHTML = h;
+  const novo = document.querySelector('#pregled .sc');
+  if (novo && sl) novo.scrollLeft = sl;
 }
 
 function glasLabel(g, ponude) {
@@ -197,10 +209,13 @@ function glasLabel(g, ponude) {
 }
 function ponudeAdmin(s, ponude) {
   const ima = Object.keys(ponude).length > 0, otvoreno = s.status !== 'ZAVRŠENO';
-  let h = '<div class="k' + (ima ? '' : ' ak') + '"><b>PRISTIGLE PONUDE</b>';
+  if (!ima) return '';
+  let h = '<div class="k"><b>PRISTIGLE PONUDE</b>';
   s.tacke.forEach(function (t, i) {
     const n = i + 1, po = ponude[n] || [];
-    h += '<div class="' + (po.length ? '' : 'ak') + '" style="margin-top:8px"><b>' + n + '. ' + esc(t) + '</b>' +
+    if (!po.length) return;
+    h += '<div style="margin-top:8px"><b>' + n + '. ' + esc(t) + '</b>' +
+      (po.length < 3 ? ' <span class="ak" style="color:#c62828">(ponuda: ' + po.length + ' - za glasanje je potrebno najmanje 3)</span>' : '') +
       po.map(function (p) {
         return '<div style="margin:4px 0 4px 12px">&bull; <b>' + esc(p.ponudjac) + '</b>' + (p.iznos ? ' - ' + esc(p.iznos) : '') +
           (p.opis ? ' - ' + esc(p.opis) : '') +
@@ -210,6 +225,14 @@ function ponudeAdmin(s, ponude) {
       (otvoreno ? ' <button class="gb" onclick="ponudaDodaj(' + n + ')">+ PONUDA</button>' : '') + '</div>';
   });
   return h + '</div>';
+}
+function dodajPonudu(broj) {
+  const n = Number(prompt('Za koju tačku dnevnog reda je ponuda? (upiši broj od 1 do ' + broj + ')'));
+  if (!n || n < 1 || n > broj) return;
+  ponudaDodaj(n);
+}
+function napomena(tekst) {
+  adm('admin_napomena', { p_id: Number(SID), p_tekst: tekst }).then(function () { document.activeElement.blur(); ucitaj(); }).catch(function (e) { alert(e.message); });
 }
 function ponudaDodaj(n) {
   const p = prompt('Ponuđač (naziv firme ili majstora):');
