@@ -192,7 +192,8 @@ function otvoriZ(id) {
       h += '<div style="margin-top:12px"><b>' + (i + 1) + '.</b> ' + esc(t) +
         (po.length ? '<div><b>Pristigle ponude:</b>' + ponudeHtml(po) + '</div>' : '') + rezHtml(r) + '</div>';
     });
-    h += '</div><div class="k"><b>PRISUTNI (' + d.prisutni.length + ')</b><table><tr><th>Stan</th><th>Ime</th><th>Način</th></tr>';
+    h += '</div><div class="k"><b>Napomena:</b> ' + (d.napomena ? esc(d.napomena) : '<span style="color:#999">______________________________________</span>') + '</div>';
+    h += '<div class="k"><b>PRISUTNI (' + d.prisutni.length + ')</b><table><tr><th>Stan</th><th>Ime</th><th>Način</th></tr>';
     d.prisutni.forEach(function (p) {
       h += '<tr><td>' + esc(p.stan) + '</td><td>' + esc(p.ime) + '</td><td>' + esc(p.nacin) + '</td></tr>';
     });
