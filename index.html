@@ -85,6 +85,7 @@ function prikazi(d) {
     '<div class="bar"><div style="width:' + pr + '%"></div></div></div>';
 
   h += realizacijaHtml(d.realizacija);
+  h += hitneHtml(d.hitne);
   h += '<div class="k"><b>Stan ' + esc(d.stan) + ' - ' + esc(d.ime) + '</b>';
   if (d.pravo === false) h += '<div class="ne">Vaš posebni deo (garaža ili poslovni prostor) nema pravo glasa na ovoj sednici.</div>';
   else if (otv && !d.prisutan) h += '<button onclick="budiPrisutan()">POTVRĐUJEM PRISUSTVO (NA DALJINU)</button>';
@@ -153,6 +154,15 @@ function rezHtml(r) {
     '<br><b class="' + (r.usvojeno ? 'us' : 'ne') + '">' + (r.usvojeno ? 'USVOJENO' : 'NIJE USVOJENO') + '</b></div>';
 }
 
+function hitneHtml(l) {
+  if (!l || !l.length) return '';
+  let h = '<div class="k"><b>IZVEŠTAJ O HITNOJ INTERVENCIJI</b>';
+  l.forEach(function (x) {
+    h += '<div style="margin-top:8px">Prijavljeno: ' + esc(x.datum) + ' u ' + esc(x.vreme) + (x.opis ? ' - ' + esc(x.opis) : '') +
+      '<br><b>' + (x.zavrseno ? 'Završeno: ' + esc(x.zavrseno) : 'U toku') + '</b></div>';
+  });
+  return h + '</div>';
+}
 function realizacijaHtml(r) {
   if (!r || !r.stavke || !r.stavke.length) return '';
   let h = '<div class="k"><b>IZVEŠTAJ O REALIZACIJI ODLUKA SA PRETHODNE SEDNICE (' + esc(r.datum) + ')</b>';
@@ -186,6 +196,7 @@ function otvoriZ(id) {
       '<br><b>MESTO SASTANKA:</b> ' + esc(s.mesto) +
       '<br><b>PRISUTNO:</b> ' + q.prisutno + ' od ' + q.ukupno + ' - ' + (q.ima ? 'IMA KVORUMA' : 'NEMA KVORUMA') + '</div>';
     h += realizacijaHtml(d.realizacija);
+    h += hitneHtml(d.hitne);
     h += '<div class="k"><b>DNEVNI RED</b>';
     s.tacke.forEach(function (t, i) {
       const r = d.rezultati[i], po = (d.ponude && d.ponude[i + 1]) || [];
