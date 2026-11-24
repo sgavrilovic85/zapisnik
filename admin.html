@@ -139,11 +139,14 @@ function ucitaj() {
   const ae = document.activeElement;
   if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA') && document.getElementById('pregled').contains(ae)) return;
   adm('admin_pregled', { p_id: Number(SID) }).then(function (d) {
-    return adm('admin_hitne_lista', { p_zgrada: d.sednica.zgrada }).then(function (hl) { prikazi(d, hl); });
+    return Promise.all([
+      adm('admin_hitne_lista', { p_zgrada: d.sednica.zgrada }),
+      d.sednica.status === 'ZAVRŠENO' ? adm('admin_realizacija_ove', { p_id: Number(SID) }) : Promise.resolve(null)
+    ]).then(function (r) { prikazi(d, r[0], r[1]); });
   }).catch(function (e) { alert(e.message); });
 }
 
-function prikazi(d, hl) {
+function prikazi(d, hl, ro) {
   const s = d.sednica, q = d.kvorum, ids = s.tacke.map(function (_, i) { return i + 1; });
   let h = '<div class="k"><b>' + esc(s.zgrada) + '</b>' + (s.ponovljena ? ' <b>(PONOVLJENA SEDNICA)</b>' : '') + ' - ' + esc(s.datum) + ' ' + esc(s.vreme) + ' - ' + esc(s.mesto) +
     '<br>Status: <b>' + esc(s.status) + '</b><br><div class="ak">' +
@@ -166,6 +169,7 @@ function prikazi(d, hl) {
   h += ponudeAdmin(s, d.ponude || {});
   h += realizacijaAdmin(d.realizacija);
   h += hitneZapisnik(hl || [], s);
+  h += ro ? realizacijaAdmin(ro, 'REALIZACIJA ODLUKA PO OVOM ZAPISNIKU') : '';
   h += '<div class="k sc"><table><tr><th>Stan</th><th>Ime</th><th>Prisutan</th>';
   s.tacke.forEach(function (t, i) {
     const kr = t.length > 22 ? t.slice(0, 22) + '...' : t;
@@ -236,7 +240,7 @@ function hitneUcitaj() {
     l.forEach(function (x) {
       h += '<tr><td>' + esc(x.datum) + ' ' + esc(x.vreme) + '</td><td>' + esc(x.stan) + '</td><td class="l">' + esc(x.opis) +
         '</td><td><input type="date" value="' + esc(x.zavrseno) + '" onchange="hitnaZavrsi(' + x.id + ',this.value)"></td>' +
-        '<td><button class="gb" onclick="hitnaObrisi(' + x.id + ')">obriši</button>' + (x.sednica ? ' <i>u zapisniku</i>' : '') + '</td></tr>';
+        '<td><button class="gb" style="background:#c62828;color:#fff" onclick="hitnaObrisi(' + x.id + ',' + (x.sednica ? 'true' : 'false') + ')">OBRIŠI</button>' + (x.sednica ? ' <i>u zapisniku</i>' : '') + '</td></tr>';
     });
     document.getElementById('hitnelista').innerHTML = h + '</table>';
   }).catch(function (e) { alert(e.message); });
@@ -252,8 +256,8 @@ function hitnaDodaj() {
 function hitnaZavrsi(id, datum) {
   adm('admin_hitna_zavrsi', { p_id: id, p_datum: datum }).then(hitneUcitaj).catch(function (e) { alert(e.message); });
 }
-function hitnaObrisi(id) {
-  if (!confirm('Obrisati ovu intervenciju?')) return;
+function hitnaObrisi(id, uZapisniku) {
+  if (!confirm(uZapisniku ? 'Ova intervencija je već u zapisniku sednice. Brisanjem se NE briše iz tog zapisnika. Obrisati je iz evidencije?' : 'Obrisati ovu intervenciju?')) return;
   adm('admin_hitna_obrisi', { p_id: id }).then(hitneUcitaj).catch(function (e) { alert(e.message); });
 }
 function glasLabel(g, ponude) {
@@ -302,12 +306,12 @@ function ponudaObrisi(id) {
   if (!confirm('Obrisati ponudu? (brišu se i glasovi za nju)')) return;
   adm('admin_ponuda_obrisi', { p_ponuda: id }).then(ucitaj).catch(function (e) { alert(e.message); });
 }
-function realizacijaAdmin(r) {
+function realizacijaAdmin(r, naslov) {
   if (!r || !r.stavke || !r.stavke.length) return '';
-  let h = '<div class="k"><b>IZVEŠTAJ O REALIZACIJI ODLUKA SA PRETHODNE SEDNICE (' + esc(r.datum) + ')</b>';
+  let h = '<div class="k"><b>' + (naslov || ('IZVEŠTAJ O REALIZACIJI ODLUKA SA PRETHODNE SEDNICE (' + esc(r.datum) + ')')) + '</b>';
   r.stavke.forEach(function (x) {
     h += '<div style="margin-top:8px"><b>Tačka ' + x.br + '.</b> ' + esc(x.tacka) + '<br>' +
-      ['ZAVRŠENO', 'DELIMIČNO', 'U TOKU'].map(function (st) {
+      ['ZA URADITI', 'U TOKU', 'ZAVRŠENO'].map(function (st) {
         const on = x.status === st;
         return '<button class="gb ' + (on ? 'on za' : '') + '" onclick="real(' + r.prethodna_id + ',' + x.br + ',\'' + st + '\',' + on + ')">' + (on ? '✔ ' : '') + st + '</button>';
       }).join('') +
