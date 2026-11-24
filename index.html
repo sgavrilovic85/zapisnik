@@ -163,9 +163,9 @@ function hitneHtml(l) {
   });
   return h + '</div>';
 }
-function realizacijaHtml(r) {
+function realizacijaHtml(r, naslov) {
   if (!r || !r.stavke || !r.stavke.length) return '';
-  let h = '<div class="k"><b>IZVEŠTAJ O REALIZACIJI ODLUKA SA PRETHODNE SEDNICE (' + esc(r.datum) + ')</b>';
+  let h = '<div class="k"><b>' + (naslov || ('IZVEŠTAJ O REALIZACIJI ODLUKA SA PRETHODNE SEDNICE (' + esc(r.datum) + ')')) + '</b>';
   r.stavke.forEach(function (x) {
     h += '<div style="margin-top:8px"><b>Tačka ' + x.br + '.</b> ' + esc(x.tacka) + '<br><b>' + (x.status ? esc(x.status) : 'nije označeno') + '</b>' + (x.napomena ? ' - ' + esc(x.napomena) : '') + '</div>';
   });
@@ -203,7 +203,9 @@ function otvoriZ(id) {
       h += '<div style="margin-top:12px"><b>' + (i + 1) + '.</b> ' + esc(t) +
         (po.length ? '<div><b>Pristigle ponude:</b>' + ponudeHtml(po) + '</div>' : '') + rezHtml(r) + '</div>';
     });
-    h += '</div><div class="k"><b>Napomena:</b> ' + (d.napomena ? esc(d.napomena) : '<span style="color:#999">______________________________________</span>') + '</div>';
+    h += '</div>';
+    h += realizacijaHtml(d.realizacija_ove, 'REALIZACIJA ODLUKA PO OVOM ZAPISNIKU');
+    h += '<div class="k"><b>Napomena:</b> ' + (d.napomena ? esc(d.napomena) : '<span style="color:#999">______________________________________</span>') + '</div>';
     h += '<div class="k"><b>PRISUTNI (' + d.prisutni.length + ')</b><table><tr><th>Stan</th><th>Ime</th><th>Način</th></tr>';
     d.prisutni.forEach(function (p) {
       h += '<tr><td>' + esc(p.stan) + '</td><td>' + esc(p.ime) + '</td><td>' + esc(p.nacin) + '</td></tr>';
