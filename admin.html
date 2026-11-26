@@ -62,6 +62,15 @@
       <button class="zel" onclick="hitnaDodaj()">DODAJ INTERVENCIJU</button>
       <div id="hitnelista" class="sc"></div>
     </details>
+    <details id="stanaribox" class="k ak">
+      <summary><b>STANARI</b> (izmena imena i PIN-a, novi vlasnik ili stan)</summary>
+      <select id="s_zg" onchange="stanariUcitaj()"></select>
+      <input id="s_filter" placeholder="Pretraga (stan ili ime)" oninput="stanariPrikazi()">
+      <div id="stanarilista" class="sc"></div>
+      <div style="margin-top:10px"><b>Dodaj stan ili vlasnika:</b></div>
+      <div class="row"><input id="n_stan" placeholder="Stan (npr. 12 ili 3G)"><input id="n_ime" placeholder="Ime i prezime"><input id="n_pin" placeholder="PIN"></div>
+      <button class="zel" onclick="stanarDodaj()">DODAJ</button>
+    </details>
     <div id="nova" class="k" style="display:none">
       <b>Nova sednica</b>
       <select id="n_zg"></select>
@@ -104,6 +113,8 @@ function uloguj() {
     const sad = new Date(), p2 = function (x) { return String(x).padStart(2, '0'); };
     document.getElementById('h_dat').value = sad.getFullYear() + '-' + p2(sad.getMonth() + 1) + '-' + p2(sad.getDate());
     document.getElementById('h_vre').value = p2(sad.getHours()) + ':' + p2(sad.getMinutes());
+    document.getElementById('s_zg').innerHTML = ZG.map(function (z) { return '<option>' + esc(z) + '</option>'; }).join('');
+    stanariUcitaj();
     hitneUcitaj();
     lista(r[0], SID);
   }).catch(function (e) { document.getElementById('m').textContent = e.message; });
@@ -230,6 +241,33 @@ function hitneZapisnik(hl, s) {
       '<br><b>' + (x.zavrseno_tekst ? 'Završeno: ' + esc(x.zavrseno_tekst) : 'U toku') + '</b></div>';
   });
   return h + '</div>';
+}
+let STANARI = [];
+function stanariUcitaj() {
+  const z = document.getElementById('s_zg').value;
+  if (!z) return;
+  adm('admin_stanari_lista', { p_zgrada: z }).then(function (l) { STANARI = l; stanariPrikazi(); }).catch(function (e) { alert(e.message); });
+}
+function stanariPrikazi() {
+  const f = document.getElementById('s_filter').value.trim().toLowerCase();
+  let h = '<table><tr><th>Stan</th><th>Ime i prezime</th><th>PIN</th></tr>';
+  STANARI.filter(function (x) { return !f || (x.stan + ' ' + x.ime).toLowerCase().indexOf(f) >= 0; }).forEach(function (x) {
+    h += '<tr><td>' + esc(x.stan) + '</td>' +
+      '<td><input id="si_' + x.id + '" value="' + esc(x.ime) + '" style="min-width:240px" onchange="stanarIzmeni(' + x.id + ')"></td>' +
+      '<td><input id="sp_' + x.id + '" value="' + esc(x.pin) + '" style="width:90px" onchange="stanarIzmeni(' + x.id + ')"></td></tr>';
+  });
+  document.getElementById('stanarilista').innerHTML = h + '</table>';
+}
+function stanarIzmeni(id) {
+  adm('admin_stanar_izmeni', { p_id: id, p_ime: document.getElementById('si_' + id).value, p_pin: document.getElementById('sp_' + id).value })
+    .then(function () { stanariUcitaj(); }).catch(function (e) { alert(e.message); stanariUcitaj(); });
+}
+function stanarDodaj() {
+  adm('admin_stanar_dodaj', { p_zgrada: document.getElementById('s_zg').value, p_stan: document.getElementById('n_stan').value,
+    p_ime: document.getElementById('n_ime').value, p_pin: document.getElementById('n_pin').value }).then(function () {
+    document.getElementById('n_stan').value = ''; document.getElementById('n_ime').value = ''; document.getElementById('n_pin').value = '';
+    stanariUcitaj();
+  }).catch(function (e) { alert(e.message); });
 }
 function hitneUcitaj() {
   const z = document.getElementById('h_zg').value;
